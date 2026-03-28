@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,12 +10,29 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 let logs = [];
+let LogUser = "";
+
+// ================= LOAD FILE SAAT START =================
+try {
+    if (fs.existsSync("databaselua.lua")) {
+        const content = fs.readFileSync("databaselua.lua", "utf-8");
+
+        const match = content.match(/LogUser = LogUser\.\."([\s\S]*)"/);
+        if (match) {
+            LogUser = match[1];
+        }
+
+        console.log("databaselua.lua loaded");
+    }
+} catch (e) {
+    console.log("gagal load databaselua.lua");
+}
 
 // ================= LOG SYSTEM =================
 function addLog(type, data, ip) {
     const time = new Date().toLocaleString();
-
     const appName = data.app || "GROWLAUNCHER/BOTHAX";
+    const user = data.nama || "Unknown";
 
     logs.push({
         time,
@@ -27,6 +45,14 @@ function addLog(type, data, ip) {
     });
 
     if (logs.length > 300) logs.shift();
+
+    // ================= LUA DATABASE =================
+    LogUser += "\\nadd_label_with_icon|small|`w" + user + "|left|7188|\\n";
+
+    const luaContent = `LogUser = ""
+LogUser = LogUser.."${LogUser}"`;
+
+    fs.writeFileSync("databaselua.lua", luaContent);
 
     console.log(`[${time}] ${type} ${ip}`, data);
 }
@@ -47,8 +73,6 @@ res.send(`
     --accent: #00ff9c;
 }
 
-* { box-sizing: border-box; }
-
 body {
     margin: 0;
     font-family: system-ui;
@@ -56,24 +80,13 @@ body {
     color: white;
 }
 
-/* HEADER */
 .header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
     padding: 12px;
     background: var(--card);
-    position: sticky;
-    top: 0;
-    z-index: 10;
 }
 
-.header h2 {
-    margin: 0;
-    font-size: 16px;
-}
-
-/* BUTTON */
 .btn {
     padding: 6px 10px;
     margin-left: 5px;
@@ -82,23 +95,8 @@ body {
     background: var(--accent);
     color: black;
     cursor: pointer;
-    font-size: 12px;
 }
 
-/* TERMINAL */
-.terminal {
-    display: none;
-    padding: 10px;
-    font-family: monospace;
-    color: var(--accent);
-    font-size: 12px;
-}
-
-.log {
-    margin-bottom: 5px;
-}
-
-/* GUI */
 .gui {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -113,29 +111,31 @@ body {
     font-size: 12px;
 }
 
-.card b {
+.terminal {
+    display: none;
+    padding: 10px;
+    font-family: monospace;
     color: var(--accent);
+    font-size: 12px;
 }
 
-/* COLORS */
 .get { color: #00bfff; }
 .post { color: #ffcc00; }
 
-/* MOBILE */
 @media (max-width: 500px) {
-    .header h2 { font-size: 14px; }
-    .btn { font-size: 11px; padding: 5px; }
+    .gui {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 </head>
 <body>
 
 <div class="header">
-    <h2>Admin Log Panel</h2>
+    <div>Admin Panel</div>
     <div>
         <button class="btn" onclick="setMode('gui')">GUI</button>
         <button class="btn" onclick="setMode('terminal')">Terminal</button>
-        <button class="btn" onclick="clearLogs()">Clear</button>
     </div>
 </div>
 
@@ -143,74 +143,55 @@ body {
 <div id="terminal" class="terminal"></div>
 
 <script>
-let mode = "gui";
 let lastLength = 0;
 
 const gui = document.getElementById("gui");
 const terminal = document.getElementById("terminal");
 
 function setMode(m) {
-    mode = m;
     gui.style.display = m === "gui" ? "grid" : "none";
     terminal.style.display = m === "terminal" ? "block" : "none";
 }
 
 setMode("gui");
 
-// terminal view
-function addTerminal(log) {
-    const div = document.createElement("div");
-    div.className = "log";
-
-    div.innerHTML = \`
-    [\${log.time}] 
-    <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span>
-    → \${JSON.stringify(log.data)}
-    (APP: \${log.data.APP})
-    \`;
-
-    terminal.appendChild(div);
-}
-
-// gui view
 function addCard(log) {
     const card = document.createElement("div");
     card.className = "card";
 
     card.innerHTML = \`
-    <div><b>Type:</b> <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span></div>
-    <div><b>Time:</b> \${log.time}</div>
-    <div><b>IP:</b> \${log.ip}</div>
     <div><b>Nama:</b> \${log.data.nama || "-"}</div>
     <div><b>UID:</b> \${log.data.uid || "-"}</div>
     <div><b>World:</b> \${log.data.world || "-"}</div>
-    <div><b>APP:</b> \${log.data.APP || "-"}</div>
+    <div><b>APP:</b> \${log.data.APP}</div>
     \`;
 
     gui.appendChild(card);
 }
 
-// load logs
-async function loadLogs() {
-    try {
-        const res = await fetch("/logs");
-        const data = await res.json();
+function addTerminal(log) {
+    const div = document.createElement("div");
 
-        if (data.length > lastLength) {
-            for (let i = lastLength; i < data.length; i++) {
-                addTerminal(data[i]);
-                addCard(data[i]);
-            }
-            lastLength = data.length;
-            terminal.scrollTop = terminal.scrollHeight;
-        }
-    } catch (e) {}
+    div.innerHTML = \`
+    [\${log.time}] 
+    <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span>
+    → \${JSON.stringify(log.data)}
+    \`;
+
+    terminal.appendChild(div);
 }
 
-function clearLogs() {
-    gui.innerHTML = "";
-    terminal.innerHTML = "";
-    lastLength = 0;
+async function loadLogs() {
+    const res = await fetch("/logs");
+    const data = await res.json();
+
+    if (data.length > lastLength) {
+        for (let i = lastLength; i < data.length; i++) {
+            addCard(data[i]);
+            addTerminal(data[i]);
+        }
+        lastLength = data.length;
+    }
 }
 
 setInterval(loadLogs, 1000);
@@ -223,11 +204,6 @@ loadLogs();
 });
 
 // ================= API =================
-
-app.get("/test", (req, res) => {
-    res.send("OK");
-});
-
 app.get("/api/get", (req, res) => {
     addLog("GET", req.query, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
     res.json({ status: "ok" });
@@ -240,6 +216,15 @@ app.post("/api/post", (req, res) => {
 
 app.get("/logs", (req, res) => {
     res.json(logs);
+});
+
+// 🔥 endpoint ambil file lua
+app.get("/databaselua.lua", (req, res) => {
+    if (fs.existsSync("databaselua.lua")) {
+        res.sendFile(__dirname + "/databaselua.lua");
+    } else {
+        res.send("LogUser = \"\"");
+    }
 });
 
 app.listen(PORT, () => {
