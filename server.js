@@ -21,78 +21,169 @@ function addLog(type, data, ip) {
         data
     });
 
-    if (logs.length > 200) logs.shift();
+    if (logs.length > 300) logs.shift();
 
     console.log(`[${time}] ${type} ${ip}`, data);
 }
 
-// ✅ ROOT (HTML langsung)
+// ================= UI =================
 app.get("/", (req, res) => {
-    res.send(`
+res.send(`
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Logs Panel</title>
+<title>Admin Log Panel</title>
 
 <style>
-body {
-    margin: 0;
-    background: #0d1117;
-    color: #00ff9c;
-    font-family: monospace;
+:root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --accent: #00ff9c;
 }
 
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: system-ui;
+    background: var(--bg);
+    color: white;
+}
+
+/* HEADER */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--card);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.header h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+/* BUTTON */
+.btn {
+    padding: 6px 10px;
+    margin-left: 5px;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent);
+    color: black;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+/* TERMINAL */
 .terminal {
-    height: 100vh;
-    overflow-y: auto;
+    display: none;
     padding: 10px;
-    font-size: 13px;
+    font-family: monospace;
+    color: var(--accent);
+    font-size: 12px;
 }
 
 .log {
-    margin-bottom: 6px;
-    word-break: break-word;
+    margin-bottom: 5px;
 }
 
+/* GUI */
+.gui {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    padding: 10px;
+}
+
+.card {
+    background: var(--card);
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.card b {
+    color: var(--accent);
+}
+
+/* COLORS */
 .get { color: #00bfff; }
 .post { color: #ffcc00; }
 
-.terminal::after {
-    content: "_";
-    animation: blink 1s infinite;
-}
-
-@keyframes blink {
-    0% {opacity: 1;}
-    50% {opacity: 0;}
-    100% {opacity: 1;}
+/* MOBILE */
+@media (max-width: 500px) {
+    .header h2 { font-size: 14px; }
+    .btn { font-size: 11px; padding: 5px; }
 }
 </style>
 </head>
 <body>
 
-<div class="terminal" id="terminal"></div>
+<div class="header">
+    <h2>Admin Log Panel</h2>
+    <div>
+        <button class="btn" onclick="setMode('gui')">GUI</button>
+        <button class="btn" onclick="setMode('terminal')">Terminal</button>
+        <button class="btn" onclick="clearLogs()">Clear</button>
+    </div>
+</div>
+
+<div id="gui" class="gui"></div>
+<div id="terminal" class="terminal"></div>
 
 <script>
-const terminal = document.getElementById("terminal");
+let mode = "gui";
 let lastLength = 0;
 
-function appendLog(log) {
+const gui = document.getElementById("gui");
+const terminal = document.getElementById("terminal");
+
+function setMode(m) {
+    mode = m;
+    gui.style.display = m === "gui" ? "grid" : "none";
+    terminal.style.display = m === "terminal" ? "block" : "none";
+}
+
+setMode("gui");
+
+// terminal view
+function addTerminal(log) {
     const div = document.createElement("div");
     div.className = "log";
 
-    const typeClass = log.type === "GET" ? "get" : "post";
-
     div.innerHTML = \`
     [\${log.time}] 
-    <span class="\${typeClass}">\${log.type}</span> 
-    \${log.ip} → \${JSON.stringify(log.data)}
+    <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span>
+    → \${JSON.stringify(log.data)}
     \`;
 
     terminal.appendChild(div);
 }
 
+// gui view
+function addCard(log) {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    card.innerHTML = \`
+    <div><b>Type:</b> <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span></div>
+    <div><b>Time:</b> \${log.time}</div>
+    <div><b>IP:</b> \${log.ip}</div>
+    <div><b>Nama:</b> \${log.data.nama || "-"}</div>
+    <div><b>UID:</b> \${log.data.uid || "-"}</div>
+    <div><b>World:</b> \${log.data.world || "-"}</div>
+    \`;
+
+    gui.appendChild(card);
+}
+
+// load logs incremental
 async function loadLogs() {
     try {
         const res = await fetch("/logs");
@@ -100,12 +191,19 @@ async function loadLogs() {
 
         if (data.length > lastLength) {
             for (let i = lastLength; i < data.length; i++) {
-                appendLog(data[i]);
+                addTerminal(data[i]);
+                addCard(data[i]);
             }
             lastLength = data.length;
             terminal.scrollTop = terminal.scrollHeight;
         }
     } catch (e) {}
+}
+
+function clearLogs() {
+    gui.innerHTML = "";
+    terminal.innerHTML = "";
+    lastLength = 0;
 }
 
 setInterval(loadLogs, 1000);
@@ -114,31 +212,33 @@ loadLogs();
 
 </body>
 </html>
-    `);
+`);
 });
+
+// ================= API =================
 
 // test
 app.get("/test", (req, res) => {
     res.send("OK");
 });
 
-// GET API
+// GET
 app.get("/api/get", (req, res) => {
     addLog("GET", req.query, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
     res.json({ status: "ok" });
 });
 
-// POST API
+// POST
 app.post("/api/post", (req, res) => {
     addLog("POST", req.body, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
     res.json({ status: "ok" });
 });
 
-// logs endpoint
+// ambil logs
 app.get("/logs", (req, res) => {
     res.json(logs);
 });
 
 app.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
+    console.log("Running on port " + PORT);
 });
