@@ -1,13 +1,8 @@
 const express = require("express");
-const cors = require("cors");
 const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 let logs = [];
 let LogUser = "";
@@ -21,202 +16,105 @@ try {
     }
 } catch (e) {}
 
-// ================= LOG SYSTEM =================
-function addLog(type, data, ip) {
-    const time = new Date().toLocaleString();
-    const appName = data.app || "GROWLAUNCHER/BOTHAX";
-    const user = data.nama || "Unknown";
+// ================= API CUSTOM =================
+app.get("/api/*", (req, res) => {
+    try {
+        const raw = req.params[0]; // ambil semua setelah /api/
 
-    logs.push({
-        time,
-        type,
-        ip,
-        data: {
-            ...data,
-            APP: appName
-        }
-    });
+        // parse manual: nama=tegar&uid=123
+        let data = {};
+        raw.split("&").forEach(pair => {
+            const [key, value] = pair.split("=");
+            if (key && value) {
+                data[key] = decodeURIComponent(value);
+            }
+        });
 
-    if (logs.length > 300) logs.shift();
+        const nama = data.nama || "Unknown";
+        const uid = data.uid || "-";
+        const world = data.world || "-";
 
-    // LUA DATABASE
-    LogUser += "\\nadd_label_with_icon|small|`w" + user + "|left|7188|\\n";
+        const time = new Date().toLocaleString();
 
-    const luaContent = `LogUser = ""
+        // simpan ke log panel
+        logs.push({
+            time,
+            data
+        });
+
+        if (logs.length > 200) logs.shift();
+
+        // ================= LUA =================
+        LogUser += "\\nadd_label_with_icon|small|`w" + nama + "|left|7188|\\n";
+
+        const luaContent = `LogUser = ""
 LogUser = LogUser.."${LogUser}"`;
 
-    fs.writeFileSync("databaselua.lua", luaContent);
-}
+        fs.writeFileSync("databaselua.lua", luaContent);
 
-// ================= UNIVERSAL TEXT DB =================
-function addUniversalText(text) {
-    const time = new Date().toLocaleString();
-    const line = `[${time}] ${text}\\n`;
-
-    fs.appendFileSync("database.txt", line);
-}
+        res.send("OK");
+    } catch (e) {
+        res.send("ERROR");
+    }
+});
 
 // ================= UI =================
 app.get("/", (req, res) => {
-res.send(`
-<!DOCTYPE html>
+res.send(`<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Panel</title>
-
+<title>Lua Panel</title>
 <style>
-body { margin:0; background:#0d1117; color:white; font-family:sans-serif; }
-
-.header {
-    display:flex; justify-content:space-between;
-    padding:10px; background:#161b22;
-}
-
-.btn {
-    padding:5px 10px; margin-left:5px;
-    border:none; background:#00ff9c; cursor:pointer;
-}
-
-.gui {
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-    gap:10px; padding:10px;
-}
-
-.card {
-    background:#161b22;
-    padding:10px; border-radius:8px;
-    font-size:12px;
-}
-
-.terminal {
-    display:none;
-    padding:10px;
-    font-family:monospace;
-    color:#00ff9c;
-}
-
-.get { color:#00bfff; }
-.post { color:#ffcc00; }
+body { background:#0d1117; color:white; font-family:sans-serif; margin:0; }
+.card { background:#161b22; margin:10px; padding:10px; border-radius:8px; }
 </style>
 </head>
 <body>
 
-<div class="header">
-    <div>Admin Panel</div>
-    <div>
-        <button class="btn" onclick="setMode('gui')">GUI</button>
-        <button class="btn" onclick="setMode('terminal')">Terminal</button>
-    </div>
-</div>
-
-<div id="gui" class="gui"></div>
-<div id="terminal" class="terminal"></div>
+<h3 style="padding:10px;">Lua Log Panel</h3>
+<div id="logs"></div>
 
 <script>
-let lastLength = 0;
+let last = 0;
 
-const gui = document.getElementById("gui");
-const terminal = document.getElementById("terminal");
+async function load(){
+    const res = await fetch("/logs");
+    const data = await res.json();
 
-function setMode(m) {
-    gui.style.display = m==="gui"?"grid":"none";
-    terminal.style.display = m==="terminal"?"block":"none";
-}
-
-setMode("gui");
-
-function addCard(log){
-    const d=document.createElement("div");
-    d.className="card";
-    d.innerHTML=\`
-    <div>Nama: \${log.data.nama||"-"}</div>
-    <div>UID: \${log.data.uid||"-"}</div>
-    <div>World: \${log.data.world||"-"}</div>
-    <div>APP: \${log.data.APP}</div>
-    \`;
-    gui.appendChild(d);
-}
-
-function addTerminal(log){
-    const d=document.createElement("div");
-    d.innerHTML=\`
-    [\${log.time}]
-    <span class="\${log.type==="GET"?"get":"post"}">\${log.type}</span>
-    → \${JSON.stringify(log.data)}
-    \`;
-    terminal.appendChild(d);
-}
-
-async function loadLogs(){
-    const res=await fetch("/logs");
-    const data=await res.json();
-
-    if(data.length>lastLength){
-        for(let i=lastLength;i<data.length;i++){
-            addCard(data[i]);
-            addTerminal(data[i]);
+    if(data.length > last){
+        for(let i=last;i<data.length;i++){
+            const d = document.createElement("div");
+            d.className="card";
+            d.innerHTML =
+                "Nama: " + (data[i].data.nama||"-") + "<br>" +
+                "UID: " + (data[i].data.uid||"-") + "<br>" +
+                "World: " + (data[i].data.world||"-");
+            document.getElementById("logs").appendChild(d);
         }
-        lastLength=data.length;
+        last = data.length;
     }
 }
 
-setInterval(loadLogs,1000);
-loadLogs();
+setInterval(load,1000);
+load();
 </script>
 
 </body>
-</html>
-`);
+</html>`);
 });
 
-// ================= API =================
-
-// log utama
-app.get("/api/get", (req, res) => {
-    addLog("GET", req.query, req.ip);
-    res.json({ status: "ok" });
-});
-
-app.post("/api/post", (req, res) => {
-    addLog("POST", req.body, req.ip);
-    res.json({ status: "ok" });
-});
-
-// universal text
-app.get("/api/addtext", (req, res) => {
-    const text = req.query.text || "no_text";
-    addUniversalText(text);
-    res.json({ status: "ok" });
-});
-
-app.post("/api/addtext", (req, res) => {
-    const text = req.body.text || "no_text";
-    addUniversalText(text);
-    res.json({ status: "ok" });
-});
-
-// ambil logs
+// ================= DATA =================
 app.get("/logs", (req, res) => {
     res.json(logs);
 });
 
-// ambil lua
+// ================= LUA FILE =================
 app.get("/databaselua.lua", (req, res) => {
     if (fs.existsSync("databaselua.lua")) {
         res.sendFile(__dirname + "/databaselua.lua");
     } else {
         res.send("LogUser = \"\"");
-    }
-});
-
-// ambil text db
-app.get("/database.txt", (req, res) => {
-    if (fs.existsSync("database.txt")) {
-        res.sendFile(__dirname + "/database.txt");
-    } else {
-        res.send("Database kosong");
     }
 });
 
