@@ -1,19 +1,20 @@
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
+const path = require("path");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 let logs = [];
 
-// format log
+// tambah log
 function addLog(type, data, ip) {
     const time = new Date().toLocaleString();
+
     logs.push({
         time,
         type,
@@ -21,39 +22,36 @@ function addLog(type, data, ip) {
         data
     });
 
-    if (logs.length > 100) logs.shift(); // limit biar ringan
+    if (logs.length > 200) logs.shift();
+
+    console.log(`[${time}] ${type}`, data);
 }
 
-// GET endpoint
+// test server
+app.get("/test", (req, res) => {
+    res.send("OK");
+});
+
+// GET
 app.get("/api/get", (req, res) => {
-    addLog("GET", req.query, req.ip);
-
-    res.json({
-        status: "ok",
-        received: req.query
-    });
+    addLog("GET", req.query, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
+    res.json({ status: "ok" });
 });
 
-// POST endpoint
+// POST
 app.post("/api/post", (req, res) => {
-    addLog("POST", req.body, req.ip);
-
-    res.json({
-        status: "ok",
-        received: req.body
-    });
+    addLog("POST", req.body, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
+    res.json({ status: "ok" });
 });
 
-// ambil log
+// ambil logs
 app.get("/logs", (req, res) => {
     res.json(logs);
 });
 
-// UI
-app.get("/", (req, res) => {
-    res.sendFile(__dirname + "/index.html");
-});
+// frontend
+app.use(express.static(path.join(__dirname, "public")));
 
 app.listen(PORT, () => {
-    console.log("Server jalan di http://localhost:" + PORT);
+    console.log("Running on port " + PORT);
 });
