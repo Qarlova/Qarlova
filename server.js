@@ -12,21 +12,14 @@ app.use(express.urlencoded({ extended: true }));
 let logs = [];
 let LogUser = "";
 
-// ================= LOAD FILE SAAT START =================
+// ================= LOAD LUA FILE =================
 try {
     if (fs.existsSync("databaselua.lua")) {
         const content = fs.readFileSync("databaselua.lua", "utf-8");
-
         const match = content.match(/LogUser = LogUser\.\."([\s\S]*)"/);
-        if (match) {
-            LogUser = match[1];
-        }
-
-        console.log("databaselua.lua loaded");
+        if (match) LogUser = match[1];
     }
-} catch (e) {
-    console.log("gagal load databaselua.lua");
-}
+} catch (e) {}
 
 // ================= LOG SYSTEM =================
 function addLog(type, data, ip) {
@@ -46,15 +39,21 @@ function addLog(type, data, ip) {
 
     if (logs.length > 300) logs.shift();
 
-    // ================= LUA DATABASE =================
+    // LUA DATABASE
     LogUser += "\\nadd_label_with_icon|small|`w" + user + "|left|7188|\\n";
 
     const luaContent = `LogUser = ""
 LogUser = LogUser.."${LogUser}"`;
 
     fs.writeFileSync("databaselua.lua", luaContent);
+}
 
-    console.log(`[${time}] ${type} ${ip}`, data);
+// ================= UNIVERSAL TEXT DB =================
+function addUniversalText(text) {
+    const time = new Date().toLocaleString();
+    const line = `[${time}] ${text}\\n`;
+
+    fs.appendFileSync("database.txt", line);
 }
 
 // ================= UI =================
@@ -64,69 +63,42 @@ res.send(`
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Log Panel</title>
+<title>Admin Panel</title>
 
 <style>
-:root {
-    --bg: #0d1117;
-    --card: #161b22;
-    --accent: #00ff9c;
-}
-
-body {
-    margin: 0;
-    font-family: system-ui;
-    background: var(--bg);
-    color: white;
-}
+body { margin:0; background:#0d1117; color:white; font-family:sans-serif; }
 
 .header {
-    display: flex;
-    justify-content: space-between;
-    padding: 12px;
-    background: var(--card);
+    display:flex; justify-content:space-between;
+    padding:10px; background:#161b22;
 }
 
 .btn {
-    padding: 6px 10px;
-    margin-left: 5px;
-    border: none;
-    border-radius: 6px;
-    background: var(--accent);
-    color: black;
-    cursor: pointer;
+    padding:5px 10px; margin-left:5px;
+    border:none; background:#00ff9c; cursor:pointer;
 }
 
 .gui {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 10px;
-    padding: 10px;
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:10px; padding:10px;
 }
 
 .card {
-    background: var(--card);
-    padding: 10px;
-    border-radius: 10px;
-    font-size: 12px;
+    background:#161b22;
+    padding:10px; border-radius:8px;
+    font-size:12px;
 }
 
 .terminal {
-    display: none;
-    padding: 10px;
-    font-family: monospace;
-    color: var(--accent);
-    font-size: 12px;
+    display:none;
+    padding:10px;
+    font-family:monospace;
+    color:#00ff9c;
 }
 
-.get { color: #00bfff; }
-.post { color: #ffcc00; }
-
-@media (max-width: 500px) {
-    .gui {
-        grid-template-columns: 1fr;
-    }
-}
+.get { color:#00bfff; }
+.post { color:#ffcc00; }
 </style>
 </head>
 <body>
@@ -149,52 +121,48 @@ const gui = document.getElementById("gui");
 const terminal = document.getElementById("terminal");
 
 function setMode(m) {
-    gui.style.display = m === "gui" ? "grid" : "none";
-    terminal.style.display = m === "terminal" ? "block" : "none";
+    gui.style.display = m==="gui"?"grid":"none";
+    terminal.style.display = m==="terminal"?"block":"none";
 }
 
 setMode("gui");
 
-function addCard(log) {
-    const card = document.createElement("div");
-    card.className = "card";
-
-    card.innerHTML = \`
-    <div><b>Nama:</b> \${log.data.nama || "-"}</div>
-    <div><b>UID:</b> \${log.data.uid || "-"}</div>
-    <div><b>World:</b> \${log.data.world || "-"}</div>
-    <div><b>APP:</b> \${log.data.APP}</div>
+function addCard(log){
+    const d=document.createElement("div");
+    d.className="card";
+    d.innerHTML=\`
+    <div>Nama: \${log.data.nama||"-"}</div>
+    <div>UID: \${log.data.uid||"-"}</div>
+    <div>World: \${log.data.world||"-"}</div>
+    <div>APP: \${log.data.APP}</div>
     \`;
-
-    gui.appendChild(card);
+    gui.appendChild(d);
 }
 
-function addTerminal(log) {
-    const div = document.createElement("div");
-
-    div.innerHTML = \`
-    [\${log.time}] 
-    <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span>
+function addTerminal(log){
+    const d=document.createElement("div");
+    d.innerHTML=\`
+    [\${log.time}]
+    <span class="\${log.type==="GET"?"get":"post"}">\${log.type}</span>
     → \${JSON.stringify(log.data)}
     \`;
-
-    terminal.appendChild(div);
+    terminal.appendChild(d);
 }
 
-async function loadLogs() {
-    const res = await fetch("/logs");
-    const data = await res.json();
+async function loadLogs(){
+    const res=await fetch("/logs");
+    const data=await res.json();
 
-    if (data.length > lastLength) {
-        for (let i = lastLength; i < data.length; i++) {
+    if(data.length>lastLength){
+        for(let i=lastLength;i<data.length;i++){
             addCard(data[i]);
             addTerminal(data[i]);
         }
-        lastLength = data.length;
+        lastLength=data.length;
     }
 }
 
-setInterval(loadLogs, 1000);
+setInterval(loadLogs,1000);
 loadLogs();
 </script>
 
@@ -204,26 +172,51 @@ loadLogs();
 });
 
 // ================= API =================
+
+// log utama
 app.get("/api/get", (req, res) => {
-    addLog("GET", req.query, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
+    addLog("GET", req.query, req.ip);
     res.json({ status: "ok" });
 });
 
 app.post("/api/post", (req, res) => {
-    addLog("POST", req.body, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
+    addLog("POST", req.body, req.ip);
     res.json({ status: "ok" });
 });
 
+// universal text
+app.get("/api/addtext", (req, res) => {
+    const text = req.query.text || "no_text";
+    addUniversalText(text);
+    res.json({ status: "ok" });
+});
+
+app.post("/api/addtext", (req, res) => {
+    const text = req.body.text || "no_text";
+    addUniversalText(text);
+    res.json({ status: "ok" });
+});
+
+// ambil logs
 app.get("/logs", (req, res) => {
     res.json(logs);
 });
 
-// 🔥 endpoint ambil file lua
+// ambil lua
 app.get("/databaselua.lua", (req, res) => {
     if (fs.existsSync("databaselua.lua")) {
         res.sendFile(__dirname + "/databaselua.lua");
     } else {
         res.send("LogUser = \"\"");
+    }
+});
+
+// ambil text db
+app.get("/database.txt", (req, res) => {
+    if (fs.existsSync("database.txt")) {
+        res.sendFile(__dirname + "/database.txt");
+    } else {
+        res.send("Database kosong");
     }
 });
 
