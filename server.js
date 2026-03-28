@@ -10,15 +10,20 @@ app.use(express.urlencoded({ extended: true }));
 
 let logs = [];
 
-// tambah log
+// ================= LOG SYSTEM =================
 function addLog(type, data, ip) {
     const time = new Date().toLocaleString();
+
+    const appName = data.app || "GROWLAUNCHER/BOTHAX";
 
     logs.push({
         time,
         type,
         ip,
-        data
+        data: {
+            ...data,
+            APP: appName
+        }
     });
 
     if (logs.length > 300) logs.shift();
@@ -161,6 +166,7 @@ function addTerminal(log) {
     [\${log.time}] 
     <span class="\${log.type === "GET" ? "get" : "post"}">\${log.type}</span>
     → \${JSON.stringify(log.data)}
+    (APP: \${log.data.APP})
     \`;
 
     terminal.appendChild(div);
@@ -178,12 +184,13 @@ function addCard(log) {
     <div><b>Nama:</b> \${log.data.nama || "-"}</div>
     <div><b>UID:</b> \${log.data.uid || "-"}</div>
     <div><b>World:</b> \${log.data.world || "-"}</div>
+    <div><b>APP:</b> \${log.data.APP || "-"}</div>
     \`;
 
     gui.appendChild(card);
 }
 
-// load logs incremental
+// load logs
 async function loadLogs() {
     try {
         const res = await fetch("/logs");
@@ -217,24 +224,20 @@ loadLogs();
 
 // ================= API =================
 
-// test
 app.get("/test", (req, res) => {
     res.send("OK");
 });
 
-// GET
 app.get("/api/get", (req, res) => {
     addLog("GET", req.query, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
     res.json({ status: "ok" });
 });
 
-// POST
 app.post("/api/post", (req, res) => {
     addLog("POST", req.body, req.headers["x-forwarded-for"] || req.socket.remoteAddress);
     res.json({ status: "ok" });
 });
 
-// ambil logs
 app.get("/logs", (req, res) => {
     res.json(logs);
 });
