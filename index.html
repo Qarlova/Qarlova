@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Log Panel</title>
+<title>Logs Panel</title>
 
 <style>
 body {
@@ -13,57 +12,42 @@ body {
     font-family: monospace;
 }
 
-.container {
-    padding: 10px;
-}
-
 .terminal {
-    background: #010409;
-    border-radius: 10px;
-    padding: 10px;
-    height: 90vh;
+    height: 100vh;
     overflow-y: auto;
+    padding: 10px;
     font-size: 13px;
 }
 
 .log {
     margin-bottom: 5px;
-    word-wrap: break-word;
+    word-break: break-word;
 }
 
 .get { color: #00bfff; }
 .post { color: #ffcc00; }
-
-@media (max-width: 600px) {
-    .terminal {
-        font-size: 11px;
-    }
-}
 </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="terminal" id="terminal"></div>
-</div>
+<div class="terminal" id="terminal"></div>
 
 <script>
 const terminal = document.getElementById("terminal");
 
-function renderLogs(data) {
+async function loadLogs() {
+    const res = await fetch("/logs");
+    const data = await res.json();
+
     terminal.innerHTML = "";
 
     data.forEach(log => {
         const div = document.createElement("div");
-        div.classList.add("log");
-
-        let typeColor = log.type === "GET" ? "get" : "post";
 
         div.innerHTML = `
-            <span>[${log.time}]</span> 
-            <span class="${typeColor}">${log.type}</span> 
-            <span>${log.ip}</span> 
-            → ${JSON.stringify(log.data)}
+        [${log.time}] 
+        <span class="${log.type === "GET" ? "get" : "post"}">${log.type}</span> 
+        → ${JSON.stringify(log.data)}
         `;
 
         terminal.appendChild(div);
@@ -72,14 +56,8 @@ function renderLogs(data) {
     terminal.scrollTop = terminal.scrollHeight;
 }
 
-async function fetchLogs() {
-    const res = await fetch("/logs");
-    const data = await res.json();
-    renderLogs(data);
-}
-
-setInterval(fetchLogs, 1000);
-fetchLogs();
+setInterval(loadLogs, 1000);
+loadLogs();
 </script>
 
 </body>
